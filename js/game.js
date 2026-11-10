@@ -17,6 +17,8 @@
     close: '<path d="M6 6l12 12M18 6 6 18"/>',
     star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
     lock: '<rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>',
+    derp: '<circle cx="12" cy="12" r="8.5"/><circle cx="9" cy="10.5" r=".8"/><circle cx="15" cy="10.5" r=".8"/><path d="M9 15c1.8 1.6 4.2 1.6 6 0"/>',
+    cloud: '<path d="M7 18.5a4.5 4.5 0 0 1-.4-9A6 6 0 0 1 18 10.5a4 4 0 0 1-.5 8z"/>',
     flask: '<path d="M9.5 3.5h5M10.5 3.5v5.6L5.2 18a2.2 2.2 0 0 0 1.9 3.3h9.8a2.2 2.2 0 0 0 1.9-3.3l-5.3-8.9V3.5"/>',
   };
   const ico = (n) => '<svg viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[n] || '') + '</svg>';
@@ -24,8 +26,9 @@
 
   /* ---------- Spielstand ---------- */
   function fresh() {
-    return { v: 1, born: Date.now(), coins: 0, total: 0, rolls: 0, inv: {}, up: { luck: 0, speed: 0, coin: 0, multi: 0, auto: 0, sleep: 0 }, pot: {}, act: {}, ach: {}, best: 0, bestId: null, shown: null, multi: 1, auto: false,
-      st: { pokes: 0, drunk: 0, kinos: 0, big: 0, away: 0 }, set: { ton: true, musik: true, kino: 'voll', q: 'auto' }, tick: Date.now() };
+    return { v: 1, born: Date.now(), coins: 0, total: 0, rolls: 0, inv: {}, up: { luck: 0, speed: 0, coin: 0, weather: 0, collect: 0, multi: 0, auto: 0, sleep: 0 }, pot: {}, act: {}, ach: {}, best: 0, bestId: null, shown: null, multi: 1, auto: false,
+      rb: { n: 0, klee: 0, all: 0, run: 0, up: { luck: 0, coin: 0, speed: 0, start: 0, auto: 0, sleep: 0 } }, q: [], qdone: 0, daily: { day: '', streak: 0, best: 0 }, wpot: null,
+      st: { pokes: 0, drunk: 0, wdrunk: 0, kinos: 0, big: 0, away: 0 }, set: { ton: true, musik: true, kino: 'voll', q: 'auto' }, tick: Date.now() };
   }
   function load() {
     let o = null; try { o = JSON.parse(localStorage.getItem(KEY)); } catch (e) { }
@@ -40,11 +43,18 @@
 
   /* ---------- Werte ---------- */
   const potMult = (kind) => { let m = 1; const t = Date.now(); for (const id in S.act) { const p = POTION_BY_ID[id]; if (p && p.kind === kind && S.act[id] > t) m = Math.max(m, p.mult); } return m; };
-  const luck = () => UPS.luck.val(S.up.luck) * potMult('luck');
-  const cdSec = () => UPS.speed.val(S.up.speed) / potMult('speed');
-  const coinM = () => UPS.coin.val(S.up.coin) * potMult('coin');
+  const kleeMul = () => 1 + 0.03 * S.rb.all;
+  const baseLuck = () => UPS.luck.val(S.up.luck) * kleeMul() * (1 + 0.1 * S.rb.up.luck);
+  const baseCoin = () => UPS.coin.val(S.up.coin) * (1 + 0.2 * S.rb.up.coin) * (1 + UPS.collect.val(S.up.collect) * found());
+  const baseCd = () => UPS.speed.val(S.up.speed) * Math.pow(0.97, S.rb.up.speed);
+  const bioM = () => UPS.weather.val(S.up.weather);
+  const luck = () => baseLuck() * potMult('luck');
+  const cdSec = () => Math.max(0.1, baseCd() / potMult('speed'));
+  const coinM = () => baseCoin() * potMult('coin');
+  function addCoins(n) { S.coins += n; S.total += n; S.rb.run += n; }
   const multiMax = () => UPS.multi.val(S.up.multi);
-  const weatherNow = () => wetterZu(Date.now());
+  const wRest = () => (S.wpot && S.wpot.until > Date.now() ? S.wpot.until - Date.now() : wetterRest(Date.now()));
+  const weatherNow = () => { const w = S.wpot; if (w && w.until > Date.now() && WETTER_BY_ID[w.wid]) return WETTER_BY_ID[w.wid]; return wetterZu(Date.now()); };
   const fmtOdds = (n) => '1 zu ' + fmt(n);
   const found = () => Object.keys(S.inv).length;
 
@@ -82,14 +92,15 @@
     const now = Date.now(), wid = weatherNow().id, lk = luck(), cm = coinM();
     let best = null, coins = 0; const counts = {}, fresh = [];
     for (let i = 0; i < n; i++) {
-      const a = forceId ? AURA_BY_ID[forceId] : pickAura(lk, wid);
+      const a = forceId ? AURA_BY_ID[forceId] : pickAura(lk, wid, null, bioM());
       counts[a.id] = (counts[a.id] || 0) + 1; coins += coinsFor(a, cm);
       if (!best || a.odds > best.odds) best = a;
     }
-    S.rolls += n; S.coins += coins; S.total += coins;
+    S.rolls += n; addCoins(coins);
     for (const id in counts) { if (!S.inv[id]) { S.inv[id] = { n: 0, t: now }; fresh.push(id); } S.inv[id].n += counts[id]; }
     if (best.odds > S.best) { S.best = best.odds; S.bestId = best.id; }
     S.shown = best.id;
+    qAdd('rolls', n); qAdd('coins', coins); if (fresh.length) qAdd('new', fresh.length); qTier(best.tier);
     return { best, coins, counts, n, isNew: fresh.indexOf(best.id) >= 0, fresh };
   }
   let lastSfx = 0;
@@ -167,10 +178,28 @@
   ACH.push({ id: 'poke', name: 'Nasenstüber', text: 'Den Derp 50 Mal anstupsen', goal: 50, get: () => S.st.pokes, reward: 150 });
   ACH.push({ id: 'wet', name: 'Wetterfrosch', text: 'Eine Wetter-Aura finden', goal: 1, get: () => (Object.keys(S.inv).some((id) => AURA_BY_ID[id].biome) ? 1 : 0), reward: 1000 });
   ACH.push({ id: 'big5', name: 'Glückspilz', text: '5 Auren ab „Legendär“ würfeln', goal: 5, get: () => S.st.big, reward: 60000 });
+  ACH.push({ id: 'r1000000', name: 'Würfel-Unendlich', text: '1.000.000 Mal würfeln', goal: 1e6, get: () => S.rolls, reward: 5e7 });
+  [200, 1500, 8000, 60000, 400000, 3e6, 2e7, 1.5e8, 1.5e9, 2e10].forEach((r, i) => { const T = TIERS[i], n = AURAS.filter((a) => a.tier === i).length; ACH.push({ id: 'full' + i, name: 'Komplett: ' + T.name, text: 'Alle ' + n + ' Auren der Stufe „' + T.name + '“ finden', goal: n, get: () => AURAS.filter((a) => a.tier === i && S.inv[a.id]).length, reward: r }); });
+  ACH.push({ id: 'coin3', name: 'Milliardär', text: '1 Milliarde Derp-Taler verdienen', goal: 1e9, get: () => S.total, reward: 1e7 });
+  ACH.push({ id: 'coin4', name: 'Derp-Dagobert', text: '1 Billion Derp-Taler verdienen', goal: 1e12, get: () => S.total, reward: 1e10 });
+  [[1, 'Aufsteiger', 2e4], [3, 'Dreimal Derp', 3e5], [10, 'Phönix-Derp', 5e6]].forEach(([g, n, r]) => ACH.push({ id: 'rb' + g, name: n, text: g + (g === 1 ? ' Mal' : ' Mal') + ' aufsteigen', goal: g, get: () => S.rb.n, reward: r }));
+  [[10, 'Fleißbienchen', 2000], [50, 'Mission: Möglich', 5e4], [200, 'Auftragsprofi', 2e6]].forEach(([g, n, r]) => ACH.push({ id: 'q' + g, name: n, text: g + ' Missionen erledigen', goal: g, get: () => S.qdone, reward: r }));
+  [[3, 'Stammgast', 1000], [7, 'Wochen-Derp', 2e4], [30, 'Monats-Derp', 1e6]].forEach(([g, n, r]) => ACH.push({ id: 'dl' + g, name: n, text: g + ' Tage in Folge das Tagesgeschenk holen', goal: g, get: () => S.daily.best, reward: r }));
+  const NBIO = AURAS.filter((a) => a.biome).length;
+  ACH.push({ id: 'wet5', name: 'Wettermacher', text: '5 Wetter-Auren finden', goal: 5, get: () => Object.keys(S.inv).filter((id) => AURA_BY_ID[id].biome).length, reward: 1e5 });
+  ACH.push({ id: 'wetall', name: 'Wetter-Meister', text: 'Alle ' + NBIO + ' Wetter-Auren finden', goal: NBIO, get: () => Object.keys(S.inv).filter((id) => AURA_BY_ID[id].biome).length, reward: 5e7 });
+  ACH.push({ id: 'wp1', name: 'Wetterhexe', text: 'Einen Wetter-Trank trinken', goal: 1, get: () => S.st.wdrunk, reward: 2000 });
+  ACH.push({ id: 'wp10', name: 'Wetterfee', text: '10 Wetter-Tränke trinken', goal: 10, get: () => S.st.wdrunk, reward: 1e5 });
+  ACH.push({ id: 'lk25', name: 'Gurken-König', text: 'Die Glücks-Gurke auf Stufe 25', goal: 25, get: () => S.up.luck, reward: 5e4 });
+  ACH.push({ id: 'lk50', name: 'Gurken-Gott', text: 'Die Glücks-Gurke auf Stufe 50', goal: 50, get: () => S.up.luck, reward: 5e6 });
+  ACH.push({ id: 'poke2', name: 'Stups-Meister', text: 'Den Derp 500 Mal anstupsen', goal: 500, get: () => S.st.pokes, reward: 1e4 });
+  ACH.push({ id: 'mu1', name: 'Mehrfach-Mensch', text: 'Den Mehrfachwurf freischalten', goal: 1, get: () => S.up.multi, reward: 3000 });
+  ACH.push({ id: 'sl1', name: 'Schlafmütze', text: 'Das Schlaf-Würfeln freischalten', goal: 1, get: () => S.up.sleep, reward: 2000 });
+  ACH.push({ id: 'kino25', name: 'Kino-Fan', text: '25 große Enthüllungen erleben', goal: 25, get: () => S.st.kinos, reward: 1e5 });
   function checkAch() {
     ACH.forEach((a) => {
       if (S.ach[a.id] || a.get() < a.goal) return;
-      S.ach[a.id] = Date.now(); S.coins += a.reward; S.total += a.reward; showCoins();
+      S.ach[a.id] = Date.now(); addCoins(a.reward); showCoins();
       toast('Erfolg: ' + a.name, '+' + fmtShort(a.reward) + ' Derp-Taler', true); setTimeout(() => SFX.ach(), 250); save();
     });
   }
@@ -191,8 +220,14 @@
   }
   function drink(id) {
     const p = POTION_BY_ID[id]; if (!(S.pot[id] > 0)) return;
-    S.pot[id]--; const t = Date.now(); S.act[id] = Math.max(t, S.act[id] || 0) + p.dur * 1000; S.st.drunk++; SFX.drink();
-    toast(p.name + ' getrunken', p.kind === 'luck' ? 'Glück ×' + p.mult : p.kind === 'speed' ? 'Pause durch ' + p.mult : 'Taler ×' + p.mult);
+    S.pot[id]--; const t = Date.now(); S.st.drunk++; SFX.drink(); qAdd('potion', 1);
+    if (p.kind === 'weather') {
+      S.act[id] = t + p.dur * 1000; S.wpot = { wid: p.wid, until: t + p.dur * 1000, id }; S.st.wdrunk++;
+      toast(WETTER_BY_ID[p.wid].name, 'Das Wetter gehört dir für ' + fmtDur(p.dur * 1000) + '.', true);
+    } else {
+      S.act[id] = Math.max(t, S.act[id] || 0) + p.dur * 1000;
+      toast(p.name + ' getrunken', p.kind === 'luck' ? 'Glück ×' + p.mult : p.kind === 'speed' ? 'Pause durch ' + p.mult : 'Taler ×' + p.mult);
+    }
     checkAch(); save(); renderSheet(); renderControls();
   }
 
@@ -207,9 +242,9 @@
     POTIONS.forEach((p) => { if (S.act[p.id] > t) chips.append(h('div', { class: 'chip pot', style: { '--pc': p.color } }, h('b', { text: p.name }), ' ', h('span', { class: 'mono', text: fmtTime((S.act[p.id] - t) / 1000) }))); });
   }
   function renderWeather() {
-    const w = weatherNow(); $('#w-name').textContent = w.name; $('#w-text').textContent = w.text; $('#w-time').textContent = fmtTime(wetterRest(Date.now()) / 1000);
+    const w = weatherNow(); $('#w-name').textContent = w.name; $('#w-text').textContent = w.text; $('#w-time').textContent = fmtTime(wRest() / 1000);
     $('#weather-chip').style.setProperty('--wc', w.sky[0] === '#2a2350' ? '#9a7bff' : '#' + w.sky[0].slice(1).replace(/./g, (c) => c));
-    const col = { normal: '#9a7bff', nacht: '#7a8cff', gewitter: '#ffe14a', regenbogen: '#ff6a9a', schnee: '#7ad6ff', nebel: '#b8d0e0', vollmond: '#dfe6ff', glitch: '#2affee', singularitaet: '#b86aff' }[w.id];
+    const col = { normal: '#9a7bff', nacht: '#7a8cff', gewitter: '#ffe14a', regenbogen: '#ff6a9a', schnee: '#7ad6ff', nebel: '#b8d0e0', vollmond: '#dfe6ff', glitch: '#2affee', singularitaet: '#b86aff', meteor: '#ffe9a0', vulkan: '#ff5a1a', fruehling: '#ff9ac8', disco: '#ff5ac8', finsternis: '#ff9a3a' }[w.id];
     $('#weather-chip').style.setProperty('--wc', col);
   }
 
@@ -254,6 +289,11 @@
     nebel: { pal: ['#3a4a55', '#10171c', '#b8d0e0', '#e0f0f8', '#ffffff'], fx: [['rise', { n: 16, c: 3, shape: 'dot', size: 40, speed: .04, dir: -1, spread: 1.2, sway: 3, a: .14 }]], seed: 13 },
     vollmond: { pal: ['#1e2a55', '#060a1c', '#c8d6ff', '#7a8cff', '#ffffff'], fx: [['stars', { n: 80, c: 4 }], ['moon', { c: 4, r: 1.1, x: 1.1, y: -1.6 }]], seed: 15 },
     glitch: { pal: ['#0b1f1f', '#020909', '#2affee', '#ff2ad1', '#ffffff'], fx: [['matrix', { n: 16, c: 2, a: .3 }], ['glitch', { rate: 4, c: 2, c2: 3, a: .22 }], ['scan', { a: .18 }]], seed: 17 },
+    meteor: { pal: ['#14204a', '#040712', '#ffe9a0', '#8ab0ff', '#ffffff'], fx: [['stars', { n: 90, c: 4 }], ['meteors', { n: 7, c: 4 }]], seed: 21 },
+    vulkan: { pal: ['#3a1208', '#100402', '#ff5a1a', '#ffa02a', '#ffe08a'], fx: [['glow', { c: 2, r: 3, y: 1.4, a: .3 }], ['waves', { n: 3, c: 2, c2: 3, y: .8, amp: .05, speed: .8, a: .4 }], ['rise', { n: 40, c: 3, shape: 'ember', size: 6, speed: .22, dir: -1, spread: 1.1, a: .8 }]], seed: 23 },
+    fruehling: { pal: ['#3a2048', '#150b1d', '#ff9ac8', '#ffd0e4', '#fff0a0'], fx: [['rise', { n: 45, c: 3, shape: 'petal', size: 6, speed: .1, dir: 1, spread: 1.2, sway: 2 }], ['rise', { n: 14, c: 4, shape: 'dot', size: 5, speed: .06, dir: -1, spread: 1.1, a: .5 }]], seed: 25 },
+    disco: { pal: ['#2a1048', '#0a0316', '#ff5ac8', '#6ae8ff', '#ffe14a'], fx: [['discoball', { r: .45, y: -1.7 }], ['rise', { n: 26, rainbow: true, shape: 'dot', size: 5, speed: .12, dir: -1, spread: 1.1, a: .6 }]], seed: 27 },
+    finsternis: { pal: ['#241020', '#040106', '#ff9a3a', '#ffe08a', '#ff5a8a'], fx: [['stars', { n: 60, c: 4 }], ['eclipse', { c: 2, r: .75, x: 0, y: -1.1 }]], seed: 29 },
     singularitaet: { pal: ['#2a1048', '#05020d', '#b86aff', '#ff9a3a', '#ffe0a8'], fx: [['stars', { n: 100, c: 4 }], ['spiral', { arms: 3, n: 70, c: 2, c2: 3, twist: 4, speed: .1, r: 1.6, size: 5, a: .45 }]], seed: 19 },
   };
   let wW = 0, wH = 0, curW = null, wFrame = 0;
@@ -333,7 +373,7 @@
 
   /* ---------- Fenster: Sammlung, Shop, Labor, Erfolge ---------- */
   const ui = { filter: 'alle' };
-  const TITLES = { coll: 'Sammlung', shop: 'Shop', lab: 'Labor', ach: 'Erfolge' };
+  const TITLES = { coll: 'Sammlung', shop: 'Shop', lab: 'Labor', derp: 'Derp', ach: 'Erfolge' };
   function openSheet(name) {
     if (sheet === name) { closeSheet(); return; }
     sheet = name; $('#sheet').hidden = false; SFX.tab();
@@ -345,7 +385,7 @@
   function renderSheet() {
     if (!sheet) return;
     const body = $('#sheet-body'), keep = body.scrollTop; $('#sheet-title').textContent = TITLES[sheet]; body.innerHTML = '';
-    ({ coll: renderColl, shop: renderShop, lab: renderLab, ach: renderAch })[sheet](body);
+    ({ coll: renderColl, shop: renderShop, lab: renderLab, derp: renderDerp, ach: renderAch })[sheet](body);
     body.scrollTop = keep;
   }
   function renderColl(body) {
@@ -371,7 +411,7 @@
     });
     if (!any) body.append(h('p', { class: 'hint', text: 'Hier ist noch nichts. Würfle weiter!' }));
   }
-  const UPCOL = { luck: '#3ddc84', speed: '#ff9a3a', coin: '#ffc83a', multi: '#ff5ac8', auto: '#2ad6c0', sleep: '#6a7bff' };
+  const UPCOL = { weather: '#4ab8ff', collect: '#ff8ac8', luck: '#3ddc84', speed: '#ff9a3a', coin: '#ffc83a', multi: '#ff5ac8', auto: '#2ad6c0', sleep: '#6a7bff' };
   function upRow(k) {
     const u = UPS[k], lv = S.up[k], maxed = lv >= u.max, cost = maxed ? 0 : u.cost(lv), can = !maxed && S.coins >= cost;
     const cur = u.show(u.val(lv)), nxt = maxed ? null : u.show(u.val(lv + 1));
@@ -383,21 +423,24 @@
   function renderShop(body) {
     $('#sheet-sub').textContent = fmtShort(S.coins) + ' Derp-Taler';
     body.append(h('p', { class: 'hint', text: 'Mit Derp-Talern wird dein Derp besser im Würfeln. Jede Aura bringt Taler, seltene viel mehr.' }));
-    body.append(h('div', { class: 'list' }, ['luck', 'speed', 'coin', 'multi', 'auto', 'sleep'].map(upRow)));
+    body.append(h('div', { class: 'list' }, ['luck', 'speed', 'coin', 'weather', 'collect', 'multi', 'auto', 'sleep'].map(upRow)));
+  }
+  function potRow(p, t) {
+    const have = S.pot[p.id] || 0, act = S.act[p.id] > t, can = S.coins >= p.price;
+    const eff = p.kind === 'luck' ? 'Glück ×' + p.mult : p.kind === 'speed' ? 'Pause ÷' + p.mult : p.kind === 'coin' ? 'Taler ×' + p.mult : 'Wetter: ' + WETTER_BY_ID[p.wid].name;
+    return h('div', { class: 'rowx', style: { '--pc': p.color } }, h('div', { class: 'ico', style: { '--ic': p.color }, html: '<span class="ic">' + ico(p.kind === 'weather' ? 'cloud' : 'flask') + '</span>' }),
+      h('div', { class: 'mid' }, h('div', { class: 'nm', text: p.name }), h('div', { class: 'ds', text: p.text }), h('div', { class: 'st' }, eff + ' für ' + fmtDur(p.dur * 1000) + '  ·  im Beutel: ', h('span', { class: 'pcount', text: have }), act ? h('span', { class: 'pcount', text: '  (läuft noch ' + fmtTime((S.act[p.id] - t) / 1000) + ')' }) : null)),
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+        h('button', { class: 'btn gold small' + (can ? '' : ' off'), onclick: () => buyPot(p.id) }, h('span', { class: 'ic', html: ico('coin') }), fmtShort(p.price)),
+        h('button', { class: 'btn small' + (have ? '' : ' off'), onclick: () => drink(p.id), text: 'Trinken' })));
   }
   function renderLab(body) {
     $('#sheet-sub').textContent = fmtShort(S.coins) + ' Derp-Taler';
     body.append(h('p', { class: 'hint', text: 'Tränke wirken eine Weile. Von jeder Sorte zählt nur der stärkste Trank, aber Glück, Tempo und Taler wirken zusammen.' }));
     const t = Date.now();
-    body.append(h('div', { class: 'list' }, POTIONS.map((p) => {
-      const have = S.pot[p.id] || 0, act = S.act[p.id] > t, can = S.coins >= p.price;
-      const eff = p.kind === 'luck' ? 'Glück ×' + p.mult : p.kind === 'speed' ? 'Pause ÷' + p.mult : 'Taler ×' + p.mult;
-      return h('div', { class: 'rowx', style: { '--pc': p.color } }, h('div', { class: 'ico', style: { background: 'linear-gradient(160deg,' + p.color + ',rgba(0,0,0,.3))' }, html: '<span class="ic">' + ico('flask') + '</span>' }),
-        h('div', { class: 'mid' }, h('div', { class: 'nm', text: p.name }), h('div', { class: 'ds', text: p.text }), h('div', { class: 'st' }, eff + ' für ' + fmtDur(p.dur * 1000) + '  ·  im Beutel: ', h('span', { class: 'pcount', text: have }), act ? h('span', { class: 'pcount', text: '  (läuft noch ' + fmtTime((S.act[p.id] - t) / 1000) + ')' }) : null)),
-        h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
-          h('button', { class: 'btn gold small' + (can ? '' : ' off'), onclick: () => buyPot(p.id) }, h('span', { class: 'ic', html: ico('coin') }), fmtShort(p.price)),
-          h('button', { class: 'btn small' + (have ? '' : ' off'), onclick: () => drink(p.id), text: 'Trinken' })));
-    })));
+    body.append(h('div', { class: 'list' }, POTIONS.filter((p) => p.kind !== 'weather').map((p) => potRow(p, t))));
+    body.append(h('h4', { class: 'sec', text: 'Wetter-Tränke' }), h('p', { class: 'hint', text: 'Erzwingen für ein paar Minuten ein bestimmtes Wetter. Perfekt, um Wetter-Auren zu jagen.' }));
+    body.append(h('div', { class: 'list' }, POTIONS.filter((p) => p.kind === 'weather').map((p) => potRow(p, t))));
   }
   function renderAch(body) {
     const done = ACH.filter((a) => S.ach[a.id]).length; $('#sheet-sub').textContent = done + ' von ' + ACH.length;
@@ -446,7 +489,7 @@
       h('div', { class: 'opt' }, h('div', null, 'Große Enthüllung', h('small', { text: 'Das Kino ab „Legendär“' })), seg([['voll', 'Voll'], ['kurz', 'Kurz'], ['aus', 'Aus']], S.set.kino, (v) => { S.set.kino = v; save(); })),
       h('div', { class: 'opt' }, h('div', null, 'Effekte', h('small', { text: 'Sparsam hilft bei ruckelndem Handy' })), seg([['auto', 'Normal'], ['low', 'Sparsam']], S.set.q, (v) => { S.set.q = v; Q = v === 'low' ? 0.45 : 1; save(); })),
       h('div', { class: 'opt' }, h('div', null, 'Spielstand-Code', h('small', { text: 'Spielstand in ein anderes Fenster mitnehmen' })), h('button', { class: 'btn small', text: 'Öffnen', onclick: () => { if (window.LGH && LGH.oeffnen) LGH.oeffnen(); else toast('Hier nicht verfügbar'); } })),
-      h('h4', { text: 'Statistik' }), stat('Würfe', fmt(S.rolls)), stat('Auren gefunden', found() + ' von ' + AURAS.length), stat('Seltenste Aura', best ? best.name : '–'), stat('Derp-Taler verdient', fmtShort(S.total)), stat('Tränke getrunken', fmt(S.st.drunk)), stat('Derp angestupst', fmt(S.st.pokes)),
+      h('h4', { text: 'Statistik' }), stat('Würfe', fmt(S.rolls)), stat('Auren gefunden', found() + ' von ' + AURAS.length), stat('Seltenste Aura', best ? best.name : '–'), stat('Derp-Taler verdient', fmtShort(S.total)), stat('Tränke getrunken', fmt(S.st.drunk)), stat('Derp angestupst', fmt(S.st.pokes)), stat('Rang', rank()), stat('Aufstiege', fmt(S.rb.n)), stat('Missionen erledigt', fmt(S.qdone)),
       h('div', { style: { marginTop: '16px', textAlign: 'center' } }, resetBtn));
     openModal(node);
   }
@@ -455,13 +498,13 @@
   function offline() {
     const el = Date.now() - (S.tick || Date.now());
     if (!(S.auto && S.up.auto && S.up.sleep > 0) || el < 60000) { S.tick = Date.now(); return; }
-    const lv = S.up.sleep, ms = Math.min(el, lv * 3600e3), eff = lv * 0.2, cd = UPS.speed.val(S.up.speed), n = Math.min(40000, Math.floor((ms / 1000 / cd) * eff * Math.min(S.multi, multiMax())));
+    const lv = S.up.sleep, ms = Math.min(el, lv * 3600e3), eff = lv * 0.2 * (1 + 0.2 * S.rb.up.sleep), cd = baseCd(), n = Math.min(40000, Math.floor((ms / 1000 / cd) * eff * Math.min(S.multi, multiMax())));
     if (n < 5) { S.tick = Date.now(); return; }
-    const t0 = S.tick, lk = UPS.luck.val(S.up.luck), cm = UPS.coin.val(S.up.coin), counts = {}, fresh = []; let coins = 0, best = null;
+    const t0 = S.tick, lk = baseLuck(), cm = baseCoin(), bm = bioM(), counts = {}, fresh = []; let coins = 0, best = null;
     for (let i = 0; i < n; i++) {
-      const w = wetterZu(t0 + (ms * i) / n), a = pickAura(lk, w.id); counts[a.id] = (counts[a.id] || 0) + 1; coins += coinsFor(a, cm); if (!best || a.odds > best.odds) best = a;
+      const w = wetterZu(t0 + (ms * i) / n), a = pickAura(lk, w.id, null, bm); counts[a.id] = (counts[a.id] || 0) + 1; coins += coinsFor(a, cm); if (!best || a.odds > best.odds) best = a;
     }
-    S.rolls += n; S.coins += coins; S.total += coins; const now = Date.now();
+    S.rolls += n; addCoins(coins); qAdd('rolls', n); const now = Date.now();
     for (const id in counts) { if (!S.inv[id]) { S.inv[id] = { n: 0, t: now }; fresh.push(id); } S.inv[id].n += counts[id]; }
     if (best.odds > S.best) { S.best = best.odds; S.bestId = best.id; }
     if (best.tier >= 5) S.st.big++;
@@ -474,6 +517,131 @@
       top.map((a) => h('div', { class: 'stat' }, h('span', { text: a.name + '  ·  ' + TIERS[a.tier].name }), h('b', { text: '×' + fmt(counts[a.id]) }))),
       h('div', { class: 'acts' }, h('button', { class: 'btn', text: 'Weiter', onclick: closeModal }))));
     SFX.pop(Math.min(4, best.tier));
+  }
+
+
+  /* ---------- Missionen ---------- */
+  const QTYPES = {
+    rolls: { text: (q) => 'Würfle ' + fmt(q.goal) + ' Mal', f: 1, ic: 'dice' },
+    coins: { text: (q) => 'Verdiene ' + fmtShort(q.goal) + ' Derp-Taler durchs Würfeln', f: 1, ic: 'coin' },
+    tier: { text: (q) => 'Würfle eine Aura ab „' + TIERS[q.tier].name + '“', f: 1.6, ic: 'star' },
+    new: { text: (q) => 'Finde ' + q.goal + (q.goal > 1 ? ' neue Auren' : ' neue Aura'), f: 1.3, ic: 'coll' },
+    potion: { text: (q) => 'Trinke ' + q.goal + (q.goal > 1 ? ' Tränke' : ' Trank'), f: 1.1, ic: 'flask' },
+    poke: { text: (q) => 'Stups den Derp ' + q.goal + ' Mal an', f: 0.6, ic: 'derp' },
+  };
+  const qBase = () => Math.max(300, S.rb.run * 0.04, S.total * 0.002);
+  function qMake(avoid) {
+    const kinds = ['rolls', 'coins', 'tier', 'poke'];
+    if (found() < AURAS.length - 2) kinds.push('new');
+    if (S.total > 1500) kinds.push('potion');
+    const free = kinds.filter((k) => avoid.indexOf(k) < 0), pool = free.length ? free : kinds, k = pool[Math.floor(Math.random() * pool.length)];
+    const q = { k, p: 0, goal: 1, tier: 0 };
+    if (k === 'rolls') q.goal = Math.round((30 + Math.min(S.rolls / 40, 400)) / 5) * 5;
+    if (k === 'coins') q.goal = Math.round(Math.max(500, S.rb.run * 0.15, S.total * 0.004));
+    if (k === 'tier') q.tier = clamp(Math.round(tierOf(S.best) * 0.6) + 1, 1, 6);
+    if (k === 'new') q.goal = found() < 20 ? 2 : 1;
+    if (k === 'potion') q.goal = S.st.drunk > 15 ? 2 : 1;
+    if (k === 'poke') q.goal = 20 + Math.round(Math.min(S.st.pokes / 10, 60));
+    q.rew = Math.round(qBase() * QTYPES[k].f * (k === 'tier' ? 1 + q.tier * 0.5 : 1));
+    return q;
+  }
+  function qFill() { S.q = S.q.filter((q) => q && QTYPES[q.k]); while (S.q.length < 3) S.q.push(qMake(S.q.map((x) => x.k))); }
+  function qAdd(k, n) { let ch = false; S.q.forEach((q) => { if (q.k === k && q.p < q.goal) { q.p = Math.min(q.goal, q.p + n); ch = true; } }); if (ch) { save(); if (sheet === 'derp') renderSheet(); } }
+  function qTier(t) { S.q.forEach((q) => { if (q.k === 'tier' && q.p < 1 && t >= q.tier) { q.p = 1; save(); } }); }
+  function qClaim(i) {
+    const q = S.q[i]; if (!q || q.p < q.goal) return;
+    addCoins(q.rew); S.qdone++; S.q.splice(i, 1); qFill(); showCoins(); SFX.ach(); toast('Mission erledigt', '+' + fmtShort(q.rew) + ' Derp-Taler', true);
+    if (S.qdone % 5 === 0) { const pid = ['luck1', 'coin1', 'speed1'][Math.floor(Math.random() * 3)]; S.pot[pid] = (S.pot[pid] || 0) + 1; setTimeout(() => toast('Bonus: ' + POTION_BY_ID[pid].name, 'Liegt in deinem Beutel.', true), 600); }
+    checkAch(); save(); renderSheet(); updBadges();
+  }
+  function updBadges() {
+    const b = $('#tabs [data-tab=derp] .badge'); if (!b) return;
+    b.hidden = !(S.q.some((q) => q.p >= q.goal) || (S.rb.n === 0 && kleeGain() >= 1));
+  }
+
+  /* ---------- Aufstieg ---------- */
+  const REB_MIN = 1e6;
+  const kleeGain = () => (S.rb.run >= REB_MIN ? Math.max(1, Math.floor(Math.pow(S.rb.run / 5e5, 0.55))) : 0);
+  const startCoins = (l) => (l ? Math.round(500 * Math.pow(4, l - 1)) : 0);
+  const KUP = {
+    luck: { name: 'Klee-Glück', text: '+10 % Glück je Stufe, für immer.', max: 50, cost: (l) => Math.ceil(2 * Math.pow(1.3, l)), show: (l) => '+' + l * 10 + ' %' },
+    coin: { name: 'Klee-Taler', text: '+20 % Derp-Taler je Stufe, für immer.', max: 50, cost: (l) => Math.ceil(2 * Math.pow(1.3, l)), show: (l) => '+' + l * 20 + ' %' },
+    speed: { name: 'Klee-Tempo', text: 'Die Pause wird je Stufe 3 % kürzer.', max: 12, cost: (l) => Math.ceil(5 * Math.pow(1.5, l)), show: (l) => '−' + Math.round((1 - Math.pow(0.97, l)) * 100) + ' %' },
+    start: { name: 'Startgeld', text: 'Neue Läufe beginnen mit Derp-Talern.', max: 10, cost: (l) => Math.ceil(4 * Math.pow(1.6, l)), show: (l) => (l ? fmtShort(startCoins(l)) : 'nichts') },
+    auto: { name: 'Auto-Start', text: 'Der Auto-Würfler ist nach jedem Aufstieg gleich da.', max: 1, cost: () => 8, show: (l) => (l ? 'ja' : 'nein') },
+    sleep: { name: 'Klee-Schlaf', text: 'Das Schlaf-Würfeln ist je Stufe 20 % fleißiger.', max: 5, cost: (l) => Math.ceil(10 * Math.pow(1.7, l)), show: (l) => '+' + l * 20 + ' %' },
+  };
+  function buyKup(k) {
+    const u = KUP[k], lv = S.rb.up[k]; if (lv >= u.max) return; const c = u.cost(lv);
+    if (S.rb.klee < c) { SFX.no(); toast('Zu wenig Klee'); return; }
+    S.rb.klee -= c; S.rb.up[k]++; SFX.buy(); save(); renderSheet(); renderControls();
+  }
+  function doRebirth() {
+    const g = kleeGain(); if (!g) return;
+    S.rb.klee += g; S.rb.all += g; S.rb.n++; S.rb.run = 0;
+    S.coins = startCoins(S.rb.up.start); S.up = { luck: 0, speed: 0, coin: 0, weather: 0, collect: 0, multi: 0, auto: S.rb.up.auto ? 1 : 0, sleep: 0 };
+    S.pot = {}; S.act = {}; S.wpot = null; S.multi = 1; if (!S.up.auto) S.auto = false;
+    S.tick = Date.now(); cdEnd = 0; showCoins(); renderControls(); closeSheet(); checkAch(); save(); flush();
+    SFX.cinematic && SFX.cinematic(5, 0.6);
+    openModal(h('div', { class: 'det set' }, h('h3', { text: 'Aufstieg!' }), h('div', { class: 'bigclover', html: ico('clover') }),
+      h('p', { text: 'Dein Derp ist wiedergeboren und hat ' + fmt(g) + ' Glücksklee mitgebracht.' }),
+      h('p', { text: 'Jedes Klee macht dich für immer ein bisschen glücklicher. Im Reiter „Derp“ kannst du Klee ausgeben.' }),
+      h('div', { class: 'acts' }, h('button', { class: 'btn', text: 'Weiter', onclick: closeModal }))));
+  }
+
+  /* ---------- Rang und Tagesgeschenk ---------- */
+  const RANKS = [[0, 'Würfel-Neuling'], [0.06, 'Aura-Lehrling'], [0.15, 'Derp-Kenner'], [0.28, 'Aura-Sammler'], [0.45, 'Derp-Experte'], [0.62, 'Aura-Meister'], [0.8, 'Derp-Legende'], [0.95, 'Aura-Gott'], [1, 'DERP-GOTT']];
+  function rank() { const f = found() / AURAS.length; let r = RANKS[0]; RANKS.forEach((x) => { if (f >= x[0]) r = x; }); return r[1]; }
+  const dayKey = () => { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
+  const dayNum = (k) => { const a = k.split('-').map(Number); return Math.round(new Date(a[0], a[1] - 1, a[2], 12).getTime() / 864e5); };
+  function dailyGift() {
+    const k = dayKey(); if (S.daily.day === k) return;
+    const gap = S.daily.day ? dayNum(k) - dayNum(S.daily.day) : 99;
+    S.daily.streak = gap === 1 ? S.daily.streak + 1 : 1; S.daily.best = Math.max(S.daily.best, S.daily.streak); S.daily.day = k;
+    const st = S.daily.streak, coins = Math.round(Math.max(500, S.rb.run * 0.03, S.total * 0.001) * (1 + 0.35 * Math.min(st - 1, 13)));
+    addCoins(coins); let potTxt = '';
+    if (st % 7 === 0) { S.pot.luck2 = (S.pot.luck2 || 0) + 1; potTxt = POTION_BY_ID.luck2.name; } else if (st % 3 === 0) { S.pot.luck1 = (S.pot.luck1 || 0) + 1; potTxt = POTION_BY_ID.luck1.name; }
+    showCoins(); checkAch(); save(); flush();
+    const days = h('div', { class: 'days' }); for (let i = 1; i <= 7; i++) days.append(h('span', { class: ((st - 1) % 7) + 1 >= i ? 'on' : '', text: i }));
+    openModal(h('div', { class: 'det set' }, h('h3', { text: 'Tagesgeschenk!' }), h('div', { class: 'bigclover gold', html: ico('star') }), days,
+      h('p', { text: st > 1 ? st + ' Tage in Folge. Weiter so!' : 'Schön, dass du da bist.' }),
+      h('div', { class: 'stat' }, h('span', { text: 'Derp-Taler' }), h('b', { text: '+' + fmtShort(coins) })), potTxt ? h('div', { class: 'stat' }, h('span', { text: 'Trank' }), h('b', { text: potTxt })) : null,
+      h('div', { class: 'acts' }, h('button', { class: 'btn', text: 'Abholen', onclick: closeModal }))));
+    SFX.ach();
+  }
+
+  /* ---------- Fenster „Derp“ ---------- */
+  let rbSure = false;
+  function renderDerp(body) {
+    qFill(); $('#sheet-sub').textContent = rank();
+    const f = found(), tot = AURAS.length;
+    body.append(h('div', { class: 'card rank' }, h('div', { class: 'rk' }, h('b', { text: rank() }), S.rb.n ? h('span', { text: '  ·  ' + S.rb.n + '× aufgestiegen' }) : null),
+      h('div', { class: 'collbar' }, h('div', { class: 'prog big' }, h('i', { style: { width: (f / tot) * 100 + '%' } })), h('span', { class: 'mono', text: f + '/' + tot })),
+      h('div', { class: 'ds', text: 'Tagesserie: ' + S.daily.streak + (S.daily.streak === 1 ? ' Tag' : ' Tage') + '  ·  Rekord: ' + S.daily.best })));
+    body.append(h('h4', { class: 'sec', text: 'Missionen' }));
+    body.append(h('div', { class: 'list' }, S.q.map((q, i) => {
+      const T = QTYPES[q.k], done = q.p >= q.goal;
+      return h('div', { class: 'rowx' + (done ? ' done' : '') }, h('div', { class: 'ico', html: '<span class="ic">' + ico(T.ic) + '</span>' }),
+        h('div', { class: 'mid' }, h('div', { class: 'nm', text: T.text(q) }), h('div', null, h('div', { class: 'prog' }, h('i', { style: { width: (Math.min(q.p, q.goal) / q.goal) * 100 + '%' } })), h('div', { class: 'ds', text: fmtShort(Math.min(q.p, q.goal)) + ' / ' + fmtShort(q.goal) }))),
+        h('button', { class: 'btn gold small' + (done ? '' : ' off'), onclick: () => qClaim(i) }, h('span', { class: 'ic', html: ico('coin') }), fmtShort(q.rew)));
+    })));
+    body.append(h('p', { class: 'hint', text: 'Jede fünfte erledigte Mission bringt einen Bonus-Trank.' }));
+    body.append(h('h4', { class: 'sec', text: 'Aufstieg' }));
+    const g = kleeGain(), need = Math.max(0, REB_MIN - S.rb.run);
+    rbSure = false;
+    const btn = h('button', { class: 'btn gold' + (g ? '' : ' off'), onclick: () => { if (!g) { SFX.no(); return; } if (!rbSure) { rbSure = true; btn.textContent = 'Sicher? Nochmal tippen'; return; } doRebirth(); } }, g ? 'Aufsteigen  (+' + fmt(g) + ' Klee)' : 'Noch ' + fmtShort(need) + ' Taler');
+    body.append(h('div', { class: 'card' }, h('div', { class: 'ds', text: 'Setzt Taler, Upgrades und Tränke zurück. Du behältst alle Auren, Erfolge und dein Klee. Jedes Klee gibt dauerhaft +3 % Glück und lässt sich unten ausgeben.' }),
+      h('div', { class: 'stat' }, h('span', { text: 'Glücksklee (frei)' }), h('b', { text: fmt(S.rb.klee) })), h('div', { class: 'stat' }, h('span', { text: 'Dauer-Glück durch Klee' }), h('b', { text: fmtLuck(kleeMul()) })),
+      h('div', { class: 'stat' }, h('span', { text: 'Taler in diesem Lauf' }), h('b', { text: fmtShort(S.rb.run) })), h('div', { style: { textAlign: 'center', marginTop: '10px' } }, btn)));
+    if (S.rb.all > 0) {
+      body.append(h('h4', { class: 'sec', text: 'Klee-Shop' }));
+      body.append(h('div', { class: 'list' }, Object.keys(KUP).map((k) => {
+        const u = KUP[k], lv = S.rb.up[k], maxed = lv >= u.max, c = maxed ? 0 : u.cost(lv), can = !maxed && S.rb.klee >= c;
+        return h('div', { class: 'rowx' }, h('div', { class: 'ico', style: { '--ic': '#3ddc84' }, html: '<span class="ic">' + ico('clover') + '</span>' }),
+          h('div', { class: 'mid' }, h('div', { class: 'nm' }, u.name, u.max > 1 ? h('span', { class: 'lv', text: 'Stufe ' + lv + '/' + u.max }) : null), h('div', { class: 'ds', text: u.text }), h('div', { class: 'st', text: u.show(lv) + (maxed ? '  (Maximum)' : '  →  ' + u.show(lv + 1)) })),
+          maxed ? h('div', { class: 'btn ghost small', text: 'Fertig' }) : h('button', { class: 'btn small' + (can ? '' : ' off'), onclick: () => buyKup(k) }, h('span', { class: 'ic', html: ico('clover') }), fmt(c)));
+      })));
+    }
   }
 
   /* ---------- Start und Hauptschleife ---------- */
@@ -509,7 +677,8 @@
     setInfo(stage.aura); if (!S.shown) { $('#aura-tier').textContent = 'Auren-Würfler'; $('#aura-name').textContent = 'Dein Derp'; $('#aura-odds').textContent = 'Würfle deine erste Aura!'; }
     showCoins(); renderControls(); renderWeather(); sizeStage(); checkAch();
     offline();
-    startSplash();
+    qFill(); updBadges(); startSplash();
+    setTimeout(dailyGift, /nosplash/.test(location.search) ? 400 : (S.rolls ? 1300 : 2000));
     requestAnimationFrame(frame);
   }
   function startSplash() {
@@ -530,11 +699,11 @@
     drawWeather(ms);
     if (ms - sec > 500) {
       sec = ms; S.tick = Date.now();
-      $('#w-time').textContent = fmtTime(wetterRest(Date.now()) / 1000);
+      $('#w-time').textContent = fmtTime(wRest() / 1000); updBadges();
       $('#cd-text').textContent = prog < 1 ? 'Pause ' + ((cdEnd - ms) / 1000).toFixed(1).replace('.', ',') + ' s' : S.auto && S.up.auto ? 'Auto-Würfler läuft' : 'Halte den Knopf für Dauer-Würfeln';
       renderControls(); if (sheet === 'lab') renderSheet();
     }
   }
-  window.__arng = { get S() { return S; }, tryRoll, openKino, force: (id) => { cdEnd = 0; return tryRoll(true, id); }, AURAS, setCoins: (n) => { S.coins = n; showCoins(); save(); }, stage };
+  window.__arng = { get S() { return S; }, doRebirth, dailyGift, qClaim, drink, buyPot, kleeGain, openSheet, tryRoll, openKino, force: (id) => { cdEnd = 0; return tryRoll(true, id); }, AURAS, setCoins: (n) => { S.coins = n; showCoins(); save(); }, stage };
   init();
 })();

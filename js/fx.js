@@ -342,6 +342,48 @@
     c.globalAlpha = 1; dot(c, g.cx, y, g.R * 0.5 * pulse, '#ffffff', 0.7);
     for (let i = 0; i < 4; i++) { const f = (i - 1.5) * 0.45; dot(c, g.cx + f * g.R * 1.8, y, g.R * (0.08 + hash(i) * 0.1), mixQ(co, '#ff9ad0', i / 3), 0.35); }
   };
+  L.meteors = (c, g, p, t, pal) => {
+    const n = Math.ceil((p.n || 6) * Math.min(1, g.q + 0.3)), co = col(pal, p, 'c', 4), a = p.a == null ? 1 : p.a; c.lineCap = 'round';
+    for (let i = 0; i < n; i++) {
+      const per = 1.5 + hash(g.seed * 3 + i) * 2.2, ph = fract(t / per + hash(i * 5.1 + g.seed)), x0 = g.W * (0.25 + hash(i * 2.7 + g.seed) * 1.0), y0 = -g.H * 0.1 + hash(i * 1.9) * g.H * 0.3;
+      const len = g.R * (1.1 + hash(i * 7.7) * 1.3), mx = -0.55, my = 0.84, d = ph * g.H * 1.4, hx = x0 + mx * d, hy = y0 + my * d, al = Math.sin(Math.PI * Math.min(1, ph * 1.3)) * a;
+      const gr = c.createLinearGradient(hx, hy, hx - mx * len, hy - my * len); gr.addColorStop(0, hexA('#ffffff', al)); gr.addColorStop(0.3, hexA(co, al * 0.6)); gr.addColorStop(1, hexA(co, 0));
+      c.strokeStyle = gr; c.lineWidth = g.u * 2.6; c.beginPath(); c.moveTo(hx, hy); c.lineTo(hx - mx * len, hy - my * len); c.stroke(); dot(c, hx, hy, g.u * 9, co, al * 0.5);
+    }
+  };
+  L.fireworks = (c, g, p, t, pal) => {
+    const n = p.n || 4, per = p.period || 2.6, m = Math.ceil(22 * Math.min(1, g.q + 0.3));
+    for (let k = 0; k < n; k++) {
+      const tt = t / per + hash(k * 3.3 + g.seed) * 4, cyc = Math.floor(tt), ph = fract(tt), s = g.seed * 7 + k * 13 + cyc * 3.1;
+      const x = g.cx + (hash(s) - 0.5) * g.W * 0.9, y = g.cy + (hash(s + 1) - 0.8) * g.R * 1.6, c1 = p.rainbow ? rainbowAt(hash(s + 2)) : pal[2 + Math.floor(hash(s + 2) * 3)];
+      if (ph < 0.18) { dot(c, x, lerp(g.H, y, easeOut(ph / 0.18)), g.u * 4, '#ffffff', 0.8); continue; }
+      const f = (ph - 0.18) / 0.82;
+      for (let i = 0; i < m; i++) { const an = (i / m) * TAU + hash(s + i) * 0.3, rr = easeOut(f) * g.R * (0.7 + hash(s + 9) * 0.5); dot(c, x + Math.cos(an) * rr, y + Math.sin(an) * rr + f * f * g.R * 0.35, g.u * (4.5 - 2.8 * f), c1, (1 - f) * 0.9); }
+      dot(c, x, y, g.R * 0.4 * (1 - f), c1, 0.35 * (1 - f));
+    }
+  };
+  L.discoball = (c, g, p, t, pal) => {
+    const r = g.R * (p.r || 0.5), x = g.cx + (p.x || 0) * g.R, y = g.cy + (p.y == null ? -1.35 : p.y) * g.R, n = Math.ceil(9 * Math.min(1, g.q + 0.3));
+    for (let i = 0; i < n; i++) {
+      const an = Math.sin(t * 0.7 + i * 1.3) * 0.9 + (i - n / 2) * 0.22, c1 = rainbowAt(i / n + t * 0.05), L2 = g.H * 1.3;
+      c.save(); c.translate(x, y); c.rotate(an); const gr = c.createLinearGradient(0, 0, 0, L2); gr.addColorStop(0, hexA(c1, 0.5)); gr.addColorStop(1, hexA(c1, 0));
+      c.fillStyle = gr; c.beginPath(); c.moveTo(-r * 0.12, 0); c.lineTo(r * 0.12, 0); c.lineTo(g.R * 0.55, L2); c.lineTo(-g.R * 0.55, L2); c.closePath(); c.fill(); c.restore();
+    }
+    c.globalCompositeOperation = 'source-over'; c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = g.u * 1.5; c.beginPath(); c.moveTo(x, -4); c.lineTo(x, y - r); c.stroke();
+    c.save(); c.beginPath(); c.arc(x, y, r, 0, TAU); c.clip(); const gr2 = c.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r); gr2.addColorStop(0, '#ffffff'); gr2.addColorStop(1, '#6a6a8a'); c.fillStyle = gr2; c.fillRect(x - r, y - r, r * 2, r * 2);
+    const m = 7; for (let i = 0; i < m; i++) for (let j = 0; j < m; j++) { c.fillStyle = (i + j) % 2 ? hexA(rainbowAt(hash(i * 9 + j) + t * 0.15), 0.28 + 0.3 * Math.sin(t * 3 + i * 2 + j)) : 'rgba(20,20,40,.18)'; c.fillRect(x - r + (i * 2 * r) / m, y - r + (j * 2 * r) / m, (2 * r) / m + 0.5, (2 * r) / m + 0.5); }
+    c.restore(); c.globalCompositeOperation = 'lighter'; dot(c, x, y, r * 2, '#ffffff', 0.25);
+  };
+  L.rainbowarc = (c, g, p, t) => {
+    const R0 = g.R * (p.r || 2), bw = g.R * 0.13, a = p.a == null ? 0.55 : p.a, cy = g.cy + g.R * (p.y == null ? 0.9 : p.y), cols = ['#ff4a4a', '#ff9a3a', '#ffe14a', '#4aff7a', '#4ab8ff', '#6a5aff', '#b86aff'];
+    c.lineCap = 'butt'; cols.forEach((co, i) => { c.strokeStyle = hexA(co, a * (0.85 + 0.15 * Math.sin(t * 2 + i))); c.lineWidth = bw; c.beginPath(); c.arc(g.cx, cy, R0 - i * bw, Math.PI * 1.03, Math.PI * 1.97); c.stroke(); });
+  };
+  L.eclipse = (c, g, p, t, pal) => {
+    const x = g.cx + (p.x || 0) * g.R, y = g.cy + (p.y || 0) * g.R, r = g.R * (p.r || 1), co = col(pal, p, 'c', 2);
+    const gl = c.createRadialGradient(x, y, r * 0.9, x, y, r * 2.4); gl.addColorStop(0, hexA(co, 0.85)); gl.addColorStop(0.25, hexA(co, 0.35)); gl.addColorStop(1, hexA(co, 0)); c.fillStyle = gl; c.fillRect(x - r * 2.4, y - r * 2.4, r * 4.8, r * 4.8);
+    c.lineCap = 'round'; for (let i = 0; i < 16; i++) { const an = hash(i) * TAU, ln = r * (0.3 + hash(i + 4) * 0.8) * (1 + Math.sin(t * 1.5 + i) * 0.2); c.strokeStyle = hexA(co, 0.5); c.lineWidth = g.u * 1.6; c.beginPath(); c.moveTo(x + Math.cos(an) * r, y + Math.sin(an) * r); c.lineTo(x + Math.cos(an) * (r + ln), y + Math.sin(an) * (r + ln)); c.stroke(); }
+    c.globalCompositeOperation = 'source-over'; c.fillStyle = '#000'; c.beginPath(); c.arc(x, y, r * 0.96, 0, TAU); c.fill(); c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = g.u * 1.2; c.stroke();
+  };
   L.confetti = (c, g, p, t, pal) => {
     const n = Math.ceil((p.n || 30) * g.q);
     for (let i = 0; i < n; i++) { const r1 = hash(i + g.seed), f = fract(r1 + t * 0.2 * (0.6 + hash(i + 3))), x = g.cx + (hash(i * 3) - 0.5) * g.W * 1.1, y = lerp(-g.H * 0.05, g.H * 1.05, f); c.save(); c.translate(x, y); c.rotate(t * 3 * hash(i + 7) + i); c.globalAlpha = 0.9; c.fillStyle = rainbowAt(hash(i + 11)); c.fillRect(-g.u * 3, -g.u * 1.5, g.u * 6, g.u * 3); c.restore(); }

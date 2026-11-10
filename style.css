@@ -255,3 +255,23 @@ svg{display:block}.ic svg{width:100%;height:100%;fill:none;stroke:currentColor;s
 .rowx .nm .lv{display:block;margin:1px 0 0}
 #toasts .toast{padding:6px 14px;display:flex;align-items:baseline;gap:8px;white-space:nowrap}
 #toasts .toast small{display:inline;margin:0}
+
+/* ===== Etappe 3: Derp-Fenster, Aufstieg, Tagesgeschenk ===== */
+h4.sec{margin:16px 2px 8px;font-size:12px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;color:var(--acc)}
+h4.sec:first-child{margin-top:2px}
+.card{padding:12px 14px;border-radius:18px;background:linear-gradient(100deg,rgba(255,255,255,.09),rgba(255,255,255,.04));border:1px solid var(--line)}
+.card .ds{font-size:12.5px;color:var(--dim);line-height:1.4;margin:6px 0 4px}
+.card .stat{font-size:13.5px}
+.card.rank{background:linear-gradient(120deg,rgba(154,123,255,.35),rgba(255,210,74,.12));border-color:rgba(190,170,255,.4)}
+.rk{font-size:20px;font-weight:900}
+.rk span{font-size:13px;color:var(--gold);font-weight:800}
+.bigclover{width:78px;height:78px;margin:6px auto;color:#3ddc84;filter:drop-shadow(0 0 14px rgba(61,220,132,.7));animation:splogo 1.6s ease-in-out infinite}
+.bigclover.gold{color:var(--gold);filter:drop-shadow(0 0 14px rgba(255,210,74,.7))}
+.bigclover svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.days{display:flex;gap:6px;justify-content:center;margin:6px 0 10px}
+.days span{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:900;font-size:13px;background:var(--soft);border:1px solid var(--line);color:var(--dim)}
+.days span.on{background:linear-gradient(160deg,#ffe07a,#e8a420);color:#2a1a00;border-color:transparent;box-shadow:0 0 12px rgba(255,210,74,.5)}
+#tabs button{font-size:10.5px}
+#tabs{gap:5px}
+.card .stat{display:flex;justify-content:space-between;gap:10px;padding:5px 2px;color:#d6cdf5;font-weight:700}
+.card .stat b{color:var(--txt)}
