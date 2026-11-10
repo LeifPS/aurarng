@@ -5,10 +5,11 @@
 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Aura RNG</title>
+<title>Derp RNG</title>
 <meta name="description" content="Würfle Auren, sammle sie alle und finde den DERP-GOTT. Ein ziemlich alberner Glücksspiel-Sammler.">
 <meta name="theme-color" content="#120d28">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Derp RNG">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="style.css">
@@ -18,7 +19,7 @@
 <div id="app">
   <header id="top">
     <div class="reserve" aria-hidden="true"></div>
-    <div class="title">AURA <b>RNG</b></div>
+    <div class="title">DERP <b>RNG</b></div>
     <div class="right">
       <div class="pill" id="coins" title="Derp-Taler"><span class="ic" id="coin-ic"></span><span id="coin-n">0</span></div>
       <button class="iconbtn" id="btn-settings" aria-label="Einstellungen"></button>
@@ -36,6 +37,7 @@
       <div id="aura-name">Gar nix</div>
       <div id="aura-odds">Würfle deine erste Aura!</div>
     </div>
+    <div id="flash"></div>
     <div id="floats"></div>
   </main>
 
@@ -81,6 +83,7 @@
   </div>
   <div class="k-dots">…</div>
 </div>
+<div id="splash"><div class="sp-glow"></div><img class="sp-logo" src="favicon.svg" alt=""><div class="sp-title">DERP <b>RNG</b></div><div class="sp-sub">Würfle. Sammle. Derpe.</div><div class="sp-bar"><i></i></div><div class="sp-hint">Tippen zum Starten</div></div>
 <div id="toasts" aria-live="polite"></div>
 
 <script src="js/util.js"></script>

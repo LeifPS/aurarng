@@ -1,5 +1,5 @@
 'use strict';
-/* Aura RNG: Spiellogik und Oberfläche */
+/* Derp RNG: Spiellogik und Oberfläche */
 (function () {
   const KEY = 'aurarng.save.v1';
   const ICONS = {
@@ -57,7 +57,7 @@
   const toastBox = () => $('#toasts');
   function toast(text, sub, gold) {
     const t = h('div', { class: 'toast' + (gold ? ' gold' : '') }, text, sub ? h('small', { text: sub }) : null);
-    toastBox().append(t); while (toastBox().children.length > 3) toastBox().firstChild.remove();
+    toastBox().append(t); while (toastBox().children.length > 2) toastBox().firstChild.remove();
     setTimeout(() => t.remove(), 3100);
   }
   function floatText(txt, color) {
@@ -71,6 +71,7 @@
   }
   function setInfo(a, res) {
     $('#aura-tier').textContent = TIERS[a.tier].name; $('#aura-info').style.setProperty('--tc', tierCol(a.tier));
+    const stg = $('#stage'); stg.style.setProperty('--tc', tierCol(a.tier)); stg.style.setProperty('--gi', [0, 0.05, 0.2, 0.4, 0.55, 0.75, 0.9, 1, 1, 1][a.tier]);
     $('#aura-name').textContent = a.name;
     $('#aura-odds').textContent = fmtOdds(a.odds) + (res && res.isNew ? '  ·  NEU!' : '') + (res && res.n > 1 ? '  ·  bester von ' + res.n : '');
     const el = $('#aura-info'); el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
@@ -102,27 +103,49 @@
     return true;
   }
   function present(res, manual, cd) {
-    const a = res.best, t = a.tier;
-    stage.aura = a; stage.pop = 1; stage.t0 = performance.now(); setInfo(a, res);
+    const a = res.best, t = a.tier, kino = t >= 5 && S.set.kino !== 'aus';
     if (res.fresh.length) { newColl += res.fresh.length; $('#tabs [data-tab=coll] .badge').hidden = false; }
     showCoins();
-    if (res.n === 1 && t === 0 || res.n === 1 && cd < 450) { /* kurze Pausen: nicht jeden Wurf anzeigen */ }
+    const nowt = performance.now();
+    if (K.skipSound || nowt - lastSfx > 90 || t >= 3) { lastSfx = nowt; if (cd > 500 || manual) SFX.roll(); }
+    const charge = !kino && (manual || cd >= 800) ? Math.min(cd * 0.55, 240 + t * 70) : 0;
+    if (kino) { S.st.kinos++; stage.aura = a; stage.pop = 1; setInfo(a, res); floatText('+' + fmtShort(res.coins), '#ffd24a'); openKino(res); }
+    else if (charge > 90) {
+      stage.charge = { t0: performance.now(), dur: charge, tc: tierCol(t), tier: t }; const rb = $('#btn-roll'); rb.classList.add('rolling');
+      setTimeout(() => { stage.charge = null; rb.classList.remove('rolling'); reveal(res, manual, cd); }, charge);
+    } else reveal(res, manual, cd);
+    if (t >= 5) S.st.big++;
+    checkAch(); save();
+    if (sheet === 'shop') renderSheet();
+  }
+  function reveal(res, manual, cd) {
+    const a = res.best, t = a.tier;
+    stage.aura = a; stage.pop = 1; stage.t0 = performance.now(); setInfo(a, res);
     floatText('+' + fmtShort(res.coins), '#ffd24a');
     const feed = $('#feed');
     if (t >= 1 || res.n > 1) {
       const it = h('div', { class: 'feed-i', style: { '--tc': tierCol(t) } }, h('i'), a.name, res.n > 1 ? h('span', { text: '×' + res.n }) : null);
       feed.append(it); while (feed.children.length > 4) feed.firstChild.remove(); setTimeout(() => it.remove(), 6200);
     }
-    const nowt = performance.now();
-    if (K.skipSound || nowt - lastSfx > 90 || t >= 3) { lastSfx = nowt; if (cd > 500 || manual) SFX.roll(); }
-    if (t >= 5 && S.set.kino !== 'aus') { S.st.kinos++; openKino(res); }
-    else {
-      SFX.pop(t);
-      if (t >= 3) { banner(a); shake(); }
+    SFX.pop(t);
+    if (t >= 3) { banner(a); shake(); }
+    if (t >= 2) flash(t);
+    if (manual || cd >= 500) flyCoins(Math.min(9, 1 + t * 1));
+  }
+  function flash(t) {
+    const f = $('#flash'); f.style.setProperty('--fa', 0.18 + t * 0.07); f.style.setProperty('--tc', tierCol(t));
+    f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+  }
+  let flying = 0;
+  function flyCoins(n) {
+    if (flying > 22) return; const src = $('#stage').getBoundingClientRect(), dst = $('#coin-ic').getBoundingClientRect();
+    for (let i = 0; i < n; i++) {
+      const e = h('i', { class: 'fcoin' }); document.body.append(e); flying++;
+      const x0 = src.left + src.width / 2 + (Math.random() - 0.5) * 70, y0 = src.top + src.height * 0.45 + (Math.random() - 0.5) * 40, x1 = dst.left + dst.width / 2, y1 = dst.top + dst.height / 2;
+      const an = e.animate([{ transform: 'translate(' + x0 + 'px,' + y0 + 'px) scale(.3)', opacity: 0 }, { transform: 'translate(' + (x0 + (Math.random() - 0.5) * 90) + 'px,' + (y0 - 40 - Math.random() * 50) + 'px) scale(1)', opacity: 1, offset: 0.28 }, { transform: 'translate(' + x1 + 'px,' + y1 + 'px) scale(.5)', opacity: 0.9 }],
+        { duration: 700 + i * 50, delay: i * 45, easing: 'cubic-bezier(.45,0,.75,.55)', fill: 'both' });
+      an.onfinish = () => { e.remove(); flying--; if (i === n - 1) { const p = $('#coins'); p.classList.remove('bump'); void p.offsetWidth; p.classList.add('bump'); } };
     }
-    if (t >= 5) S.st.big++;
-    checkAch(); save();
-    if (sheet === 'shop') renderSheet();
   }
   function banner(a) {
     const b = $('#banner'); b.style.setProperty('--tc', tierCol(a.tier)); $('#banner-tier').textContent = TIERS[a.tier].name; $('#banner-name').textContent = a.name;
@@ -201,9 +224,23 @@
   function drawStage(ms) {
     const a = stage.aura, t = ms / 1000; sc.setTransform(sDpr, 0, 0, sDpr, 0, 0);
     stage.pop = Math.max(0, stage.pop - 0.035 * 1);
-    const expr = performance.now() < stage.exprUntil ? stage.expr : null;
+    const ch = stage.charge, expr = performance.now() < stage.exprUntil ? stage.expr : ch ? 'shock' : null;
     const R = Math.min(sW * 0.36, sH * 0.31), g = { cx: sW / 2, cy: sH * 0.44, R, W: sW, H: sH, q: Q };
-    FX.renderAura(sc, a, g, t, { pop: stage.pop, expr });
+    if (ch) {
+      const p = clamp((ms - ch.t0) / ch.dur, 0, 1); sc.save(); const sh = p * p * (1.5 + ch.tier * 0.6); sc.translate((Math.random() - 0.5) * sh * 2, (Math.random() - 0.5) * sh * 2);
+      FX.renderAura(sc, a, g, t, { pop: 0, expr }); drawCharge(sc, g, ch, p); sc.restore();
+    } else FX.renderAura(sc, a, g, t, { pop: stage.pop, expr });
+  }
+  function drawCharge(c, g, ch, p) {
+    const n = Math.round((14 + ch.tier * 5) * Math.max(0.5, Q)), e = easeInOut(p), tc = ch.tc;
+    c.save(); c.globalCompositeOperation = 'lighter';
+    FX.dot(c, g.cx, g.cy, g.R * (0.4 + p * 0.9), tc, 0.12 + p * 0.5);
+    for (let i = 0; i < n; i++) {
+      const r = lerp(g.R * 2.3, g.R * 0.22, e) * (0.75 + 0.5 * hash(i + 5)), an = hash(i * 1.7) * TAU + p * 4.5 * (1 + hash(i) * 0.5);
+      FX.dot(c, g.cx + Math.cos(an) * r, g.cy + Math.sin(an) * r * 0.85, 2 + hash(i + 2) * 3.4, i % 3 === 0 ? '#ffffff' : tc, 0.25 + p * 0.7);
+    }
+    c.strokeStyle = hexA(tc, 0.7 * (1 - p)); c.lineWidth = 2 + (1 - p) * 4; c.beginPath(); c.arc(g.cx, g.cy, g.R * (2.2 - 1.7 * e), 0, TAU); c.stroke();
+    c.restore();
   }
 
   /* ---------- Leinwand: Wetter ---------- */
@@ -312,24 +349,33 @@
     body.scrollTop = keep;
   }
   function renderColl(body) {
-    $('#sheet-sub').textContent = found() + ' von ' + AURAS.length + ' gefunden';
+    const tot = AURAS.length, got = found(); $('#sheet-sub').textContent = got + ' von ' + tot + ' gefunden';
+    body.append(h('div', { class: 'collbar' }, h('div', { class: 'prog big' }, h('i', { style: { width: (got / tot) * 100 + '%' } })), h('span', { class: 'mono', text: Math.floor((got / tot) * 100) + ' %' })));
     const fl = [['alle', 'Alle'], ['da', 'Gefunden'], ['fehlt', 'Fehlend'], ['wetter', 'Wetter']];
     body.append(h('div', { class: 'filters' }, fl.map(([k, n]) => h('button', { class: ui.filter === k ? 'on' : '', text: n, onclick: () => { ui.filter = k; SFX.click(); renderSheet(); } }))));
-    const list = AURAS.slice().sort((a, b) => a.odds - b.odds).filter((a) => ui.filter === 'alle' || (ui.filter === 'da' && S.inv[a.id]) || (ui.filter === 'fehlt' && !S.inv[a.id]) || (ui.filter === 'wetter' && a.biome));
-    if (!list.length) body.append(h('p', { class: 'hint', text: 'Hier ist noch nichts. Würfle weiter!' }));
-    const grid = h('div', { class: 'grid' });
-    list.forEach((a) => {
-      const inv = S.inv[a.id], c = h('button', { class: 'cardx' + (inv ? '' : ' locked') + (S.shown === a.id ? ' eq' : ''), style: { '--tc': tierCol(a.tier) }, onclick: () => { SFX.click(); openDetail(a); } },
-        h('div', { class: 'th' }, inv ? h('img', { src: FX.thumb(a, 160), alt: a.name, width: 160, height: 160 }) : h('span', { class: 'q', text: '?' })),
-        h('div', { class: 'nm', text: inv ? a.name : '???' }), h('div', { class: 'od', text: fmtOdds(a.odds) }), inv ? h('span', { class: 'cnt', text: '×' + fmtShort(inv.n) }) : null);
-      grid.append(c);
+    const pass = (a) => ui.filter === 'alle' || (ui.filter === 'da' && S.inv[a.id]) || (ui.filter === 'fehlt' && !S.inv[a.id]) || (ui.filter === 'wetter' && a.biome);
+    let any = false;
+    TIERS.forEach((T) => {
+      const all = AURAS.filter((a) => a.tier === T.id); if (!all.length) return;
+      const list = all.filter(pass).sort((a, b) => a.odds - b.odds); if (!list.length) return; any = true;
+      const have = all.filter((a) => S.inv[a.id]).length;
+      body.append(h('div', { class: 'tierhead' + (have === all.length ? ' full' : ''), style: { '--tc': T.color } }, h('b', { text: T.name }), h('span', { class: 'mono', text: have + '/' + all.length }), h('i')));
+      const grid = h('div', { class: 'grid' });
+      list.forEach((a) => {
+        const inv = S.inv[a.id], foil = inv ? (a.tier >= 6 ? ' holo' : a.tier >= 3 ? ' foil' : '') : '';
+        grid.append(h('button', { class: 'cardx t' + a.tier + (inv ? '' : ' locked') + foil + (S.shown === a.id ? ' eq' : ''), style: { '--tc': tierCol(a.tier) }, onclick: () => { SFX.click(); openDetail(a); } },
+          h('div', { class: 'th' }, inv ? h('img', { src: FX.thumb(a, 160), alt: a.name, width: 160, height: 160 }) : h('span', { class: 'q', text: '?' })),
+          h('div', { class: 'nm', text: inv ? a.name : '???' }), h('div', { class: 'od', text: fmtOdds(a.odds) }), inv ? h('span', { class: 'cnt', text: '×' + fmtShort(inv.n) }) : null));
+      });
+      body.append(grid);
     });
-    body.append(grid);
+    if (!any) body.append(h('p', { class: 'hint', text: 'Hier ist noch nichts. Würfle weiter!' }));
   }
+  const UPCOL = { luck: '#3ddc84', speed: '#ff9a3a', coin: '#ffc83a', multi: '#ff5ac8', auto: '#2ad6c0', sleep: '#6a7bff' };
   function upRow(k) {
     const u = UPS[k], lv = S.up[k], maxed = lv >= u.max, cost = maxed ? 0 : u.cost(lv), can = !maxed && S.coins >= cost;
     const cur = u.show(u.val(lv)), nxt = maxed ? null : u.show(u.val(lv + 1));
-    return h('div', { class: 'rowx' }, h('div', { class: 'ico', html: '<span class="ic">' + ico(u.ic) + '</span>' }),
+    return h('div', { class: 'rowx' }, h('div', { class: 'ico', style: { '--ic': UPCOL[k] || '#9a7bff' }, html: '<span class="ic">' + ico(u.ic) + '</span>' }),
       h('div', { class: 'mid' }, h('div', { class: 'nm' }, u.name, u.max > 1 ? h('span', { class: 'lv', text: 'Stufe ' + lv + '/' + u.max }) : null), h('div', { class: 'ds', text: u.text }),
         h('div', { class: 'st', text: maxed ? cur + '  (Maximum)' : cur + '  →  ' + nxt })),
       maxed ? h('div', { class: 'btn ghost small', text: 'Fertig' }) : h('button', { class: 'btn gold' + (can ? '' : ' off'), onclick: () => buyUp(k) }, h('span', { class: 'ic', html: ico('coin') }), fmtShort(cost)));
@@ -437,7 +483,7 @@
     $('#sheet-close').innerHTML = ico('close'); $('#sheet-close').addEventListener('click', () => { SFX.click(); closeSheet(); });
     $('#btn-settings').addEventListener('click', openSettings);
     const roll = $('#btn-roll');
-    roll.addEventListener('pointerdown', (e) => { e.preventDefault(); SFX.unlock(); holding = true; roll.classList.add('held'); tryRoll(true); });
+    roll.addEventListener('pointerdown', (e) => { e.preventDefault(); SFX.unlock(); holding = true; roll.classList.add('held'); roll.classList.remove('rip'); void roll.offsetWidth; roll.classList.add('rip'); tryRoll(true); });
     const up = () => { holding = false; roll.classList.remove('held'); };
     ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => roll.addEventListener(ev, up));
     $('#btn-auto').addEventListener('click', () => {
@@ -463,7 +509,14 @@
     setInfo(stage.aura); if (!S.shown) { $('#aura-tier').textContent = 'Auren-Würfler'; $('#aura-name').textContent = 'Dein Derp'; $('#aura-odds').textContent = 'Würfle deine erste Aura!'; }
     showCoins(); renderControls(); renderWeather(); sizeStage(); checkAch();
     offline();
+    startSplash();
     requestAnimationFrame(frame);
+  }
+  function startSplash() {
+    const sp = $('#splash'); if (!sp) return;
+    if (/nosplash/.test(location.search)) { sp.remove(); return; }
+    let done = false; const end = () => { if (done) return; done = true; sp.classList.add('out'); setTimeout(() => sp.remove(), 600); };
+    sp.addEventListener('pointerdown', () => { SFX.unlock(); end(); }); setTimeout(end, S.rolls ? 1100 : 1700);
   }
   let lastMs = performance.now(), fpsAcc = 0, fpsN = 0, sec = 0;
   function frame(ms) {

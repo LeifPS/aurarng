@@ -1,4 +1,4 @@
-# Aura RNG
+# Derp RNG
 
 Ein alberner Glücks-Sammler für den Leif Game Hub: Würfle Auren, sammle alle 46 und finde den DERP-GOTT.
 
